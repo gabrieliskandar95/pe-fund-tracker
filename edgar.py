@@ -165,17 +165,19 @@ def _parse_form_d(xml_bytes: bytes, cik: str, accession: str) -> list[dict]:
 
 async def _fetch_form_d(client: httpx.AsyncClient, cik: str, accession: str) -> list[dict]:
     acc_nodash = accession.replace("-", "")
-    # Try filing index first to find the primary XML
+    index_url = f"{_EDGAR_BASE}/Archives/edgar/data/{cik}/{acc_nodash}/{accession}-index.json"
+    logger.info("Fetching index: %s", index_url)
     try:
-        idx = await _get(client, f"{_EDGAR_BASE}/Archives/edgar/data/{cik}/{acc_nodash}/{accession}-index.json")
+        idx = await _get(client, index_url)
         files = idx.get("directory", {}).get("item", [])
         xml_files = [f["name"] for f in files if f.get("name", "").lower().endswith(".xml")]
     except Exception:
-        xml_files = ["primary-document.xml"]
+        xml_files = [f"{accession}.xml", "primary-document.xml"]
 
     for xml_name in xml_files[:3]:
         try:
             url = f"{_EDGAR_BASE}/Archives/edgar/data/{cik}/{acc_nodash}/{xml_name}"
+            logger.info("Fetching Form D XML: %s", url)
             xml_bytes = await _get_bytes(client, url)
             records = _parse_form_d(xml_bytes, cik, accession)
             if records is not None:
