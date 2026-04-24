@@ -15,6 +15,7 @@ _ADVISER_API = "https://api.adviserinfo.sec.gov/api/Firm"
 _TIMEOUT = httpx.Timeout(10.0)
 _RATE_DELAY = 0.15
 _BATCH_SIZE = 500
+_HEADERS = {"User-Agent": "pe-fund-tracker gabrieliskandar@gmail.com"}
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +24,7 @@ _BATCH_SIZE = 500
 
 async def _get(client: httpx.AsyncClient, url: str, **params) -> dict:
     await asyncio.sleep(_RATE_DELAY)
-    r = await client.get(url, params=params, timeout=_TIMEOUT)
+    r = await client.get(url, params=params, timeout=_TIMEOUT, headers=_HEADERS)
     r.raise_for_status()
     return r.json()
 
