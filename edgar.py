@@ -16,6 +16,12 @@ _TIMEOUT = httpx.Timeout(10.0)
 _RATE_DELAY = 0.15
 _BATCH_SIZE = 500
 _HEADERS = {"User-Agent": "pe-fund-tracker gabrieliskandar@gmail.com"}
+_IAPD_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://adviserinfo.sec.gov/",
+    "Origin": "https://adviserinfo.sec.gov",
+}
 
 _PE_SEARCH_TERMS = ["private equity", "buyout", "growth equity", "venture capital"]
 
@@ -26,7 +32,8 @@ _PE_SEARCH_TERMS = ["private equity", "buyout", "growth equity", "venture capita
 
 async def _get(client: httpx.AsyncClient, url: str, **params) -> dict:
     await asyncio.sleep(_RATE_DELAY)
-    r = await client.get(url, params=params, timeout=_TIMEOUT, headers=_HEADERS)
+    headers = _IAPD_HEADERS if "adviserinfo.sec.gov" in url else _HEADERS
+    r = await client.get(url, params=params, timeout=_TIMEOUT, headers=headers)
     r.raise_for_status()
     return r.json()
 
