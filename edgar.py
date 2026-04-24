@@ -10,12 +10,14 @@ logger = logging.getLogger(__name__)
 
 CUTOFF_DATE = "2018-01-01"
 
-_SEARCH_BASE = "https://efts.sec.gov/LATEST/search-index"
+_IAPD_SEARCH = "https://api.adviserinfo.sec.gov/search/firm"
 _ADVISER_API = "https://api.adviserinfo.sec.gov/api/Firm"
 _TIMEOUT = httpx.Timeout(10.0)
 _RATE_DELAY = 0.15
 _BATCH_SIZE = 500
 _HEADERS = {"User-Agent": "pe-fund-tracker gabrieliskandar@gmail.com"}
+
+_PE_SEARCH_TERMS = ["private equity", "buyout", "growth equity", "venture capital"]
 
 
 # ---------------------------------------------------------------------------
@@ -58,48 +60,47 @@ def _safe_int(val) -> int | None:
 # ---------------------------------------------------------------------------
 
 async def fetch_all_adviser_ciks() -> list[dict]:
-    """Return deduplicated [{sec_file_number, adviser_name}] for all PE-fund ADV filers."""
+    """Return deduplicated [{sec_file_number, adviser_name}] for candidate PE-fund advisers."""
     results: list[dict] = []
     seen: set[str] = set()
-    page_size = 10
-    from_offset = 0
 
     async with httpx.AsyncClient() as client:
-        while True:
-            data = await _get(
-                client,
-                _SEARCH_BASE,
-                q='"Private Equity Fund"',
-                forms="ADV",
-                dateRange="custom",
-                startdt="2018-01-01",
-                **{"from": from_offset},
-            )
-
-            hits_wrapper = data.get("hits", {})
-            total = hits_wrapper.get("total", {}).get("value", 0)
-            hits = hits_wrapper.get("hits", [])
-
-            if not hits:
-                break
-
-            for hit in hits:
-                src = hit.get("_source", {})
-                file_num = src.get("file_num") or hit.get("_id", "")
-                if not file_num or file_num in seen:
-                    continue
-                seen.add(file_num)
-                results.append(
-                    {
-                        "sec_file_number": file_num,
-                        "adviser_name": src.get("entity_name", ""),
-                    }
+        for term in _PE_SEARCH_TERMS:
+            rows = 100
+            start = 0
+            while True:
+                data = await _get(
+                    client,
+                    _IAPD_SEARCH,
+                    query=term,
+                    rows=rows,
+                    start=start,
                 )
 
-            from_offset += page_size
-            if from_offset >= total:
-                break
+                hits_wrapper = data.get("hits", {})
+                total_raw = hits_wrapper.get("total", 0)
+                total = total_raw if isinstance(total_raw, int) else total_raw.get("value", 0)
+                hits = hits_wrapper.get("hits", [])
 
+                if not hits:
+                    break
+
+                for hit in hits:
+                    src = hit.get("_source", {})
+                    crd = str(src.get("firm_source_id") or "")
+                    name = str(src.get("firm_name") or "")
+                    scope = str(src.get("firm_scope") or "")
+
+                    if not crd or crd in seen or scope.upper() == "INACTIVE":
+                        continue
+                    seen.add(crd)
+                    results.append({"sec_file_number": crd, "adviser_name": name})
+
+                start += rows
+                if start >= total:
+                    break
+
+    logger.info("Found %d candidate advisers via IAPD search", len(results))
     return results
 
 
@@ -224,12 +225,15 @@ def _extract_fund(fund: dict, adviser_meta: dict, adviser_num_funds: int) -> dic
 
 
 async def fetch_adv_filing(sec_file_number: str) -> list[dict]:
-    """Return merged fund records for one adviser identified by sec_file_number."""
+    """Return merged fund records for one adviser identified by sec_file_number or CRD."""
     async with httpx.AsyncClient() as client:
-        crd = await _resolve_crd(client, sec_file_number)
-        if not crd:
-            logger.warning("Could not resolve CRD for %s — skipping", sec_file_number)
-            return []
+        if sec_file_number.isdigit():
+            crd = sec_file_number
+        else:
+            crd = await _resolve_crd(client, sec_file_number)
+            if not crd:
+                logger.warning("Could not resolve CRD for %s — skipping", sec_file_number)
+                return []
 
         # Part 1 — adviser header
         part1_raw = await _get(client, f"{_ADVISER_API}/{crd}/LatestFilingHeaderInfo")
