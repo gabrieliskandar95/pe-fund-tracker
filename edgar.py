@@ -96,10 +96,17 @@ async def fetch_all_adviser_ciks() -> list[dict]:
                     src = hit.get("_source", {})
                     crd = str(src.get("firm_source_id") or "")
                     name = str(src.get("firm_name") or "")
-                    scope = str(src.get("firm_scope") or "")
+                    ia_scope = str(src.get("firm_ia_scope") or "")
+                    ia_sec_num = str(src.get("firm_ia_full_sec_number") or "")
 
-                    if not crd or crd in seen or scope.upper() == "INACTIVE":
+                    # Only active investment advisers (801- prefix = IA)
+                    if not crd or crd in seen:
                         continue
+                    if not ia_sec_num.startswith("801-") and ia_scope.upper() != "ACTIVE":
+                        continue
+                    if ia_scope.upper() == "INACTIVE":
+                        continue
+
                     seen.add(crd)
                     results.append({"sec_file_number": crd, "adviser_name": name})
 
