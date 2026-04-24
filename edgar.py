@@ -198,15 +198,19 @@ async def fetch_fund_filings() -> list[dict]:
 
     async with httpx.AsyncClient() as client:
         while True:
-            data = await _get(
-                client,
-                _EFTS_BASE,
-                q='"private equity fund"',
-                forms="D,D/A",
-                dateRange="custom",
-                startdt=CUTOFF_DATE,
-                **{"from": from_offset},
-            )
+            try:
+                data = await _get(
+                    client,
+                    _EFTS_BASE,
+                    q='"private equity fund"',
+                    forms="D,D/A",
+                    dateRange="custom",
+                    startdt=CUTOFF_DATE,
+                    **{"from": from_offset},
+                )
+            except httpx.HTTPStatusError as e:
+                logger.warning("EFTS returned %d at offset %d — stopping", e.response.status_code, from_offset)
+                break
 
             hits_wrapper = data.get("hits", {})
             total_raw = hits_wrapper.get("total", 0)
@@ -225,7 +229,6 @@ async def fetch_fund_filings() -> list[dict]:
                 accession = hit.get("_id", "")
                 src = hit.get("_source", {})
                 entity_name = src.get("entity_name", "")
-                # CIK is the first 10 digits of the accession number
                 raw_cik = accession.replace("-", "")[:10].lstrip("0")
 
                 if not raw_cik or raw_cik in seen:
