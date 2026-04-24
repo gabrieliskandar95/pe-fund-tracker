@@ -73,7 +73,6 @@ async def fetch_all_adviser_ciks() -> list[dict]:
                 forms="ADV",
                 dateRange="custom",
                 startdt="2018-01-01",
-                **{"hits.hits._source": "period_of_report,entity_name,file_num"},
                 **{"from": from_offset},
             )
 
