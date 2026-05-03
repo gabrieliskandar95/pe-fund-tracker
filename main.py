@@ -201,6 +201,58 @@ async def get_stats():
 # GET /health
 # ---------------------------------------------------------------------------
 
+@app.get("/admin/test-edgar")
+async def test_edgar():
+    """Step-by-step EDGAR connectivity test for debugging."""
+    import httpx as _httpx
+    from edgar import _EFTS_BASE, _EDGAR_BASE, _HEADERS, _TIMEOUT, CUTOFF_DATE
+
+    out: dict = {}
+    async with _httpx.AsyncClient() as client:
+        # 1. EFTS search
+        try:
+            r = await client.get(
+                _EFTS_BASE,
+                params={"q": '"private equity fund"', "forms": "D,D/A",
+                        "dateRange": "custom", "startdt": CUTOFF_DATE,
+                        "from": 0, "size": 3},
+                timeout=_TIMEOUT, headers=_HEADERS,
+            )
+            out["efts_status"] = r.status_code
+            out["efts_url"] = str(r.url)
+            if r.status_code == 200:
+                data = r.json()
+                hits = data.get("hits", {}).get("hits", [])
+                out["efts_total"] = data.get("hits", {}).get("total", 0)
+                out["efts_hits_returned"] = len(hits)
+                if hits:
+                    first = hits[0]
+                    out["first_id"] = first.get("_id")
+                    out["first_source"] = first.get("_source", {})
+                    # 2. Archive index
+                    acc = first.get("_id", "")
+                    acc_nd = acc.replace("-", "")
+                    cik = acc_nd[:10].lstrip("0")
+                    out["derived_cik"] = cik
+                    idx_url = f"{_EDGAR_BASE}/Archives/edgar/data/{cik}/{acc_nd}/{acc}-index.json"
+                    out["index_url"] = idx_url
+                    try:
+                        r2 = await client.get(idx_url, timeout=_TIMEOUT, headers=_HEADERS)
+                        out["index_status"] = r2.status_code
+                        if r2.status_code == 200:
+                            out["index_files"] = [
+                                f["name"] for f in r2.json().get("directory", {}).get("item", [])
+                            ]
+                    except Exception as e2:
+                        out["index_error"] = str(e2)
+            else:
+                out["efts_body"] = r.text[:500]
+        except Exception as e:
+            out["efts_error"] = str(e)
+
+    return out
+
+
 @app.get("/health")
 async def health():
     con = get_db()

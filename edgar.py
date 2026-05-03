@@ -171,7 +171,9 @@ async def _fetch_form_d(client: httpx.AsyncClient, cik: str, accession: str) -> 
         idx = await _get(client, index_url)
         files = idx.get("directory", {}).get("item", [])
         xml_files = [f["name"] for f in files if f.get("name", "").lower().endswith(".xml")]
-    except Exception:
+        logger.info("Index OK for %s — xml files: %s", accession, xml_files)
+    except Exception as e:
+        logger.warning("Index fetch failed for %s: %s", index_url, e)
         xml_files = [f"{accession}.xml", "primary-document.xml"]
 
     for xml_name in xml_files[:3]:
@@ -182,7 +184,8 @@ async def _fetch_form_d(client: httpx.AsyncClient, cik: str, accession: str) -> 
             records = _parse_form_d(xml_bytes, cik, accession)
             if records is not None:
                 return records
-        except Exception:
+        except Exception as e:
+            logger.warning("XML fetch failed (%s): %s", url, e)
             continue
     return []
 
@@ -208,7 +211,7 @@ async def fetch_fund_filings() -> list[dict]:
                     forms="D,D/A",
                     dateRange="custom",
                     startdt=CUTOFF_DATE,
-                    **{"from": from_offset},
+                    **{"from": from_offset, "size": page_size},
                 )
             except httpx.HTTPStatusError as e:
                 logger.warning("EFTS returned %d at offset %d — stopping", e.response.status_code, from_offset)
