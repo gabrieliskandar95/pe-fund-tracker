@@ -230,7 +230,7 @@ async def test_edgar():
                     out["first_id"] = first.get("_id")
                     out["first_source"] = first.get("_source", {})
                     # 2. Archive index
-                    acc = first.get("_id", "")
+                    acc = first.get("_id", "").split(":")[0]
                     acc_nd = acc.replace("-", "")
                     cik = acc_nd[:10].lstrip("0")
                     out["derived_cik"] = cik

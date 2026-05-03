@@ -231,7 +231,8 @@ async def fetch_fund_filings() -> list[dict]:
                 break
 
             for hit in hits:
-                accession = hit.get("_id", "")
+                raw_id = hit.get("_id", "")
+                accession = raw_id.split(":")[0]  # _id is "{accession}:filename"
                 src = hit.get("_source", {})
                 entity_name = src.get("entity_name", "")
                 raw_cik = accession.replace("-", "")[:10].lstrip("0")
@@ -302,7 +303,7 @@ async def run_incremental_refresh() -> int:
         )
         hits = data.get("hits", {}).get("hits", [])
         for hit in hits:
-            accession = hit.get("_id", "")
+            accession = hit.get("_id", "").split(":")[0]
             raw_cik = accession.replace("-", "")[:10].lstrip("0")
             if raw_cik and raw_cik not in seen:
                 seen.add(raw_cik)
